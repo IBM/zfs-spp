@@ -191,6 +191,9 @@ Manage the on-disk format version of storage pools.
 .It Xr zpool-wait 8
 Waits until all background activity of the given types has ceased in the given
 pool.
+.It Xr zpool-ddtload 8
+Loads the DDT for the given pool, enabling improved write I/O performance
+within the bounds of ARC.
 .El
 .
 .Ss Fault Resolution
@@ -557,4 +560,7 @@ is not set, it is assumed that the user is allowed to run
 .Xr zpool-sync 8 ,
 .Xr zpool-trim 8 ,
 .Xr zpool-upgrade 8 ,
-.Xr zpool-wait 8
+.Xr zpool-wait 8 ,
+.Xr zpool-ddtload 8 ,
+.Xr zpoolconcepts 8 ,
+.Xr zpoolprops 8
