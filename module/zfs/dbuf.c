@@ -514,7 +514,8 @@ dbuf_verify_user(dmu_buf_impl_t *db, dbvu_verify_type_t verify_type)
 
 	/* Clients must resolve a dbuf before attaching user data. */
 	ASSERT(db->db.db_data != NULL);
-	ASSERT3U(db->db_state, ==, DB_CACHED);
+	if (db->db_blkid != DMU_BONUS_BLKID)
+		ASSERT3U(db->db_state, ==, DB_CACHED);
 
 	holds = zfs_refcount_count(&db->db_holds);
 	if (verify_type == DBVU_EVICTING) {

@@ -46,6 +46,14 @@ static kmem_cache_t *ddt_entry_cache;
  */
 int zfs_dedup_prefetch = 0;
 
+/*
+ * Maximum number of unique (refcount==1) entries allowed in the DDT.
+ * If more entries are added, old (randomly selected) entries will be evicted.
+ * Assuming each entry is 320bytes, 128MB/320 = 134217728/320 = 419430 entries
+ */
+#define	DDT_UNIQUE_MAX_SIZE		134217728
+unsigned long zfs_unique_ddt_max = DDT_UNIQUE_MAX_SIZE;
+
 static const ddt_ops_t *ddt_ops[DDT_TYPES] = {
 	&ddt_zap_ops,
 };
@@ -226,6 +234,9 @@ ddt_object_walk(ddt_t *ddt, enum ddt_type type, enum ddt_class class,
     uint64_t *walk, ddt_entry_t *dde)
 {
 	ASSERT(ddt_object_exists(ddt, type, class));
+
+	dde->dde_type = type;
+	dde->dde_class = class;
 
 	return (ddt_ops[type]->ddt_op_walk(ddt->ddt_os,
 	    ddt->ddt_object[type][class], dde, walk));
@@ -436,7 +447,7 @@ ddt_stat_add(ddt_stat_t *dst, const ddt_stat_t *src, uint64_t neg)
 		*d++ += (*s++ ^ neg) - neg;
 }
 
-static void
+void
 ddt_stat_update(ddt_t *ddt, ddt_entry_t *dde, uint64_t neg)
 {
 	ddt_stat_t dds;
@@ -1071,9 +1082,40 @@ ddt_sync_entry(ddt_t *ddt, ddt_entry_t *dde, dmu_tx_t *tx, uint64_t txg)
 
 	if (otype != DDT_TYPES &&
 	    (otype != ntype || oclass != nclass || total_refcnt == 0)) {
+		/*
+  		 * Note: if we could evict entries from the (UNIQUE) DDT
+  		 * while there are outstanding changes (ddt_entry_t's in
+  		 * ddt_tree), this remove could fail because it could have
+  		 * been evicted.
+  		 */
 		VERIFY(ddt_object_remove(ddt, otype, oclass, dde, tx) == 0);
 		ASSERT(ddt_object_lookup(ddt, otype, oclass, dde) == ENOENT);
 	}
+
+#if defined(ZFS_DEBUG) && !defined(_KERNEL)
+	(void) printf("ddt_sync_entry(txg=%llu): writing oclass=%u nclass=%u: ",
+	    (long long)txg,
+	    oclass, nclass);
+#endif
+	for (int p = 0; p < DDT_PHYS_TYPES; p++) {
+		if (dde->dde_phys[p].ddp_phys_birth == 0)
+			continue;
+#if defined(ZFS_DEBUG) && !defined(_KERNEL)
+		(void) printf("phys_type=%u rc=%llu phys_birth=%llu vd0=%llu off0=0x%llx vd1=%llu off1=0x%llx vd2=%llu off2=0x%llx; \n",
+		    p,
+		    (long long)dde->dde_phys[p].ddp_refcnt,
+		    (long long)dde->dde_phys[p].ddp_phys_birth,
+		    (long long)DVA_GET_VDEV(&dde->dde_phys[p].ddp_dva[0]),
+		    (long long)DVA_GET_OFFSET(&dde->dde_phys[p].ddp_dva[0]),
+		    (long long)DVA_GET_VDEV(&dde->dde_phys[p].ddp_dva[1]),
+		    (long long)DVA_GET_OFFSET(&dde->dde_phys[p].ddp_dva[1]),
+		    (long long)DVA_GET_VDEV(&dde->dde_phys[p].ddp_dva[2]),
+		    (long long)DVA_GET_OFFSET(&dde->dde_phys[p].ddp_dva[2]));
+#endif
+	}
+#if defined(ZFS_DEBUG) && !defined(_KERNEL)
+	(void) printf("\n");
+#endif
 
 	if (total_refcnt != 0) {
 		dde->dde_type = ntype;
@@ -1097,12 +1139,40 @@ ddt_sync_entry(ddt_t *ddt, ddt_entry_t *dde, dmu_tx_t *tx, uint64_t txg)
 	}
 }
 
+static uint64_t
+ddt_unique_max_size(void)
+{
+	uint64_t size;
+	/*
+  	 * Make sure our globals have meaningful values in case the user
+  	 * altered them.
+  	 */
+	size = zfs_unique_ddt_max;
+	if (size == 0) {
+		cmn_err(CE_NOTE, "Bad value for zfs_unique_ddt_max, value must "
+		    "be greater than zero, resetting it to the default (%d)",
+		    DDT_UNIQUE_MAX_SIZE);
+		size = zfs_unique_ddt_max = DDT_UNIQUE_MAX_SIZE;
+	}
+
+	/*
+ 	 * Abstract the calculation of conversion from amt of ram consumption
+ 	 * to the number of entries. Here we take the given set value of the
+ 	 * set size in bytes default of 1GB and divide by size of ddt_entry_t
+ 	 * this will give us the amount of entries that should be set.
+ 	 */
+	size = size/sizeof(ddt_entry_t);
+
+	return (size);
+}
+
 static void
 ddt_sync_table(ddt_t *ddt, dmu_tx_t *tx, uint64_t txg)
 {
 	spa_t *spa = ddt->ddt_spa;
 	ddt_entry_t *dde;
 	void *cookie = NULL;
+	uint64_t ddt_unique_max = ddt_unique_max_size();
 
 	if (avl_numnodes(&ddt->ddt_tree) == 0)
 		return;
@@ -1118,6 +1188,64 @@ ddt_sync_table(ddt_t *ddt, dmu_tx_t *tx, uint64_t txg)
 	while ((dde = avl_destroy_nodes(&ddt->ddt_tree, &cookie)) != NULL) {
 		ddt_sync_entry(ddt, dde, tx, txg);
 		ddt_free(dde);
+	}
+
+	/*
+  	 * If the dedup table is too big, evict entries.
+  	 *
+  	 * This is currently based on the value of zfs_unique_ddt_max.
+  	 * We do not need to tie to arc_min or c_min because if we set
+  	 * the value of zfs_unique_ddt_max too high, then that just means
+  	 * we allow more refcount=1 entries. Once c_min hits then it will
+  	 * start shrinking the ddt anyways. Therefore we dont need to
+  	 * tune this area based upon DDT size /unique ddt entry size in MB.
+  	 * People might also want flexbility with fine tuning the exact
+  	 * unique entries they want for their own data, depending on what kind
+  	 * of writes they are doing.
+  	 */
+	if (ddt_object_exists(ddt, DDT_TYPE_CURRENT, DDT_CLASS_UNIQUE)) {
+		uint64_t count = 0;
+		VERIFY(ddt_object_count(ddt, DDT_TYPE_CURRENT, DDT_CLASS_UNIQUE, &count) == 0);
+		for (int64_t i = 0; i < (int64_t)(count - ddt_unique_max); i++) {
+			ddt_entry_t rmdde;
+			bzero(&rmdde, sizeof (ddt_entry_t));
+			uint64_t walk = spa_get_random(UINT64_MAX);
+			if (ddt_object_walk(ddt,
+			    DDT_TYPE_CURRENT, DDT_CLASS_UNIQUE,
+			    &walk, &rmdde) == 0) {
+				enum ddt_phys_type t;
+				for (t = 0; t < DDT_PHYS_TYPES; t++) {
+					if (rmdde.dde_phys[t].ddp_refcnt != 0)
+						break;
+				}
+#if defined(ZFS_DEBUG) && !defined(_KERNEL)
+				(void) printf("ddt_sync_table(txg=%llu): evicting %p type=%u vd0=%llu off0=0x%llx vd1=%llu off1=0x%llx vd2=%llu off2=0x%llx\n",
+				    (long long)txg,
+				    &rmdde,
+				    t,
+				    (long long)DVA_GET_VDEV(&rmdde.dde_phys[t].ddp_dva[0]),
+				    (long long)DVA_GET_OFFSET(&rmdde.dde_phys[t].ddp_dva[0]),
+				    (long long)DVA_GET_VDEV(&rmdde.dde_phys[t].ddp_dva[1]),
+				    (long long)DVA_GET_OFFSET(&rmdde.dde_phys[t].ddp_dva[1]),
+				    (long long)DVA_GET_VDEV(&rmdde.dde_phys[t].ddp_dva[2]),
+				    (long long)DVA_GET_OFFSET(&rmdde.dde_phys[t].ddp_dva[2]));
+#endif
+				ASSERT3U(ddt_phys_total_refcnt(&rmdde), ==, 1);
+				ASSERT3U(t, >, DDT_PHYS_DITTO);
+				ASSERT(rmdde.dde_phys[t].ddp_phys_birth != 0);
+				ASSERT3U(rmdde.dde_phys[t].ddp_refcnt, ==, 1);
+				for (enum ddt_phys_type u = 0; u < DDT_PHYS_TYPES; u++) {
+					if (u != t) {
+						ASSERT0(rmdde.dde_phys[u].ddp_phys_birth);
+						ASSERT0(rmdde.dde_phys[u].ddp_refcnt);
+					}
+				}
+				ddt_stat_update(ddt, &rmdde, -1);
+				VERIFY0(ddt_object_remove(ddt,
+				    DDT_TYPE_CURRENT, DDT_CLASS_UNIQUE,
+				    &rmdde, tx));
+			}
+		}
 	}
 
 	for (enum ddt_type type = 0; type < DDT_TYPES; type++) {
@@ -1192,8 +1320,6 @@ ddt_walk(spa_t *spa, ddt_bookmark_t *ddb, ddt_entry_t *dde)
 					    ddb->ddb_type, ddb->ddb_class,
 					    &ddb->ddb_cursor, dde);
 				}
-				dde->dde_type = ddb->ddb_type;
-				dde->dde_class = ddb->ddb_class;
 				if (error == 0)
 					return (0);
 				if (error != ENOENT)
@@ -1211,4 +1337,6 @@ ddt_walk(spa_t *spa, ddt_bookmark_t *ddb, ddt_entry_t *dde)
 /* BEGIN CSTYLED */
 ZFS_MODULE_PARAM(zfs_dedup, zfs_dedup_, prefetch, INT, ZMOD_RW,
 	"Enable prefetching dedup-ed blks");
+ZFS_MODULE_PARAM(zfs_unique, zfs_unique_, ddt_max, ULONG, ZMOD_RW,
+	"Max refcount=1 size");
 /* END CSTYLED */

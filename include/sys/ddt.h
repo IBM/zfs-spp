@@ -217,6 +217,7 @@ extern boolean_t ddt_histogram_empty(const ddt_histogram_t *ddh);
 extern void ddt_get_dedup_object_stats(spa_t *spa, ddt_object_t *ddo);
 extern void ddt_get_dedup_histogram(spa_t *spa, ddt_histogram_t *ddh);
 extern void ddt_get_dedup_stats(spa_t *spa, ddt_stat_t *dds_total);
+extern void ddt_stat_update(ddt_t *ddt, ddt_entry_t *dde, uint64_t neg);
 
 extern uint64_t ddt_get_dedup_dspace(spa_t *spa);
 extern uint64_t ddt_get_pool_dedup_ratio(spa_t *spa);
