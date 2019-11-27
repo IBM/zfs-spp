@@ -3394,8 +3394,8 @@ zio_ddt_free(zio_t *zio)
 		    (long long)DVA_GET_VDEV(BP_IDENTITY(bp)),
 		    (long long)DVA_GET_OFFSET(BP_IDENTITY(bp)),
 		    (long long)ddt_phys_total_refcnt(dde));
-		ddt_phys_decref(ddp);
 #endif
+		ddt_phys_decref(ddp);
 	} else {
 #if defined(ZFS_DEBUG) && !defined(_KERNEL)
 		(void) printf("zio_ddt_free(vd=%llu off=%llx) non-matching, rc=%llu\n",
