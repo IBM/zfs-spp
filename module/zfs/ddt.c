@@ -51,7 +51,7 @@ int zfs_dedup_prefetch = 0;
  * If more entries are added, old (randomly selected) entries will be evicted.
  * Assuming each entry is 320bytes, 128MB/320 = 134217728/320 = 419430 entries
  */
-#define	DDT_UNIQUE_MAX_SIZE		134217728
+#define	DDT_UNIQUE_MAX_SIZE		0
 unsigned long zfs_unique_ddt_max = DDT_UNIQUE_MAX_SIZE;
 
 static const ddt_ops_t *ddt_ops[DDT_TYPES] = {
@@ -1148,9 +1148,9 @@ ddt_unique_max_size(void)
   	 * altered them.
   	 */
 	size = zfs_unique_ddt_max;
-	if (size == 0) {
+	if (size < 1024) {
 		cmn_err(CE_NOTE, "Bad value for zfs_unique_ddt_max, value must "
-		    "be greater than zero, resetting it to the default (%d)",
+		    "be greater than 1024 bytes, resetting it to the default (%d)",
 		    DDT_UNIQUE_MAX_SIZE);
 		size = zfs_unique_ddt_max = DDT_UNIQUE_MAX_SIZE;
 	}
@@ -1203,7 +1203,7 @@ ddt_sync_table(ddt_t *ddt, dmu_tx_t *tx, uint64_t txg)
   	 * unique entries they want for their own data, depending on what kind
   	 * of writes they are doing.
   	 */
-	if (ddt_object_exists(ddt, DDT_TYPE_CURRENT, DDT_CLASS_UNIQUE)) {
+	if (ddt_object_exists(ddt, DDT_TYPE_CURRENT, DDT_CLASS_UNIQUE) && (ddt_unique_max != 0)) {
 		uint64_t count = 0;
 		VERIFY(ddt_object_count(ddt, DDT_TYPE_CURRENT, DDT_CLASS_UNIQUE, &count) == 0);
 		for (int64_t i = 0; i < (int64_t)(count - ddt_unique_max); i++) {
