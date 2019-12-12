@@ -49,7 +49,8 @@ int zfs_dedup_prefetch = 0;
 /*
  * Maximum number of unique (refcount==1) entries allowed in the DDT.
  * If more entries are added, old (randomly selected) entries will be evicted.
- * Assuming each entry is 320bytes, 128MB/320 = 134217728/320 = 419430 entries
+ * Assuming each entry is 469bytes, you take the provided zfs_unique_ddt_max
+ * size and divide by 469 bytes to get blocks.
  */
 #define	DDT_UNIQUE_MAX_SIZE		0
 unsigned long zfs_unique_ddt_max = DDT_UNIQUE_MAX_SIZE;
@@ -1148,7 +1149,7 @@ ddt_unique_max_size(void)
   	 * altered them.
   	 */
 	size = zfs_unique_ddt_max;
-	if (size < 1024) {
+	if (size > 0 && size < 1024) {
 		cmn_err(CE_NOTE, "Bad value for zfs_unique_ddt_max, value must "
 		    "be greater than 1024 bytes, resetting it to the default (%d)",
 		    DDT_UNIQUE_MAX_SIZE);
@@ -1158,7 +1159,7 @@ ddt_unique_max_size(void)
 	/*
  	 * Abstract the calculation of conversion from amt of ram consumption
  	 * to the number of entries. Here we take the given set value of the
- 	 * set size in bytes default of 1GB and divide by size of ddt_entry_t
+ 	 * set size in bytes and divide by size of ddt_entry_t
  	 * this will give us the amount of entries that should be set.
  	 */
 	size = size/sizeof(ddt_entry_t);
