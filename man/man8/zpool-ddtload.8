@@ -31,15 +31,19 @@
 .Dt ZPOOL-DDTLOAD 8
 .Os
 .Sh NAME
-.Nm zpool-ddtload
+.Nm zpool-load
 .Nd Manage version and feature flags of ZFS storage pools
 .Sh SYNOPSIS
 .Nm zpool
-.Cm ddtload
+.Cm load
+.Ar type
 .Ar pool
 .Xc
-Loads the DDT for the given pool, enabling improved write I/O performance
-within the bounds of ARC.
+Loads specific types of data for the given pool.
+.Bl -tag -width Ds
+.It Ar type
+The type of data to load, such as ddt, enabling improved write I/O performance
+within the bounds of ARC
 .El
 .It Xo
 .Nm
