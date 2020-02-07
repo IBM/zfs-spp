@@ -79,15 +79,15 @@ ddt_object_create(ddt_t *ddt, enum ddt_type type, enum ddt_class class,
 	ddt_object_name(ddt, type, class, name);
 
 	ASSERT(*objectp == 0);
-	VERIFY(ddt_ops[type]->ddt_op_create(os, objectp, tx, prehash) == 0);
+	VERIFY0(ddt_ops[type]->ddt_op_create(os, objectp, tx, prehash));
 	ASSERT(*objectp != 0);
 
-	VERIFY(zap_add(os, DMU_POOL_DIRECTORY_OBJECT, name,
-	    sizeof (uint64_t), 1, objectp, tx) == 0);
+	VERIFY0(zap_add(os, DMU_POOL_DIRECTORY_OBJECT, name,
+	    sizeof (uint64_t), 1, objectp, tx));
 
-	VERIFY(zap_add(os, spa->spa_ddt_stat_object, name,
+	VERIFY0(zap_add(os, spa->spa_ddt_stat_object, name,
 	    sizeof (uint64_t), sizeof (ddt_histogram_t) / sizeof (uint64_t),
-	    &ddt->ddt_histogram[type][class], tx) == 0);
+	    &ddt->ddt_histogram[type][class], tx));
 }
 
 static void
@@ -104,10 +104,11 @@ ddt_object_destroy(ddt_t *ddt, enum ddt_type type, enum ddt_class class,
 
 	ASSERT(*objectp != 0);
 	ASSERT(ddt_histogram_empty(&ddt->ddt_histogram[type][class]));
-	VERIFY(ddt_object_count(ddt, type, class, &count) == 0 && count == 0);
-	VERIFY(zap_remove(os, DMU_POOL_DIRECTORY_OBJECT, name, tx) == 0);
-	VERIFY(zap_remove(os, spa->spa_ddt_stat_object, name, tx) == 0);
-	VERIFY(ddt_ops[type]->ddt_op_destroy(os, *objectp, tx) == 0);
+	VERIFY0(ddt_object_count(ddt, type, class, &count));
+	VERIFY0(count);
+	VERIFY0(zap_remove(os, DMU_POOL_DIRECTORY_OBJECT, name, tx));
+	VERIFY0(zap_remove(os, spa->spa_ddt_stat_object, name, tx));
+	VERIFY0(ddt_ops[type]->ddt_op_destroy(os, *objectp, tx));
 	bzero(&ddt->ddt_object_stats[type][class], sizeof (ddt_object_t));
 
 	*objectp = 0;
@@ -890,9 +891,17 @@ ddt_load(spa_t *spa)
 
 	for (enum zio_checksum c = 0; c < ZIO_CHECKSUM_FUNCTIONS; c++) {
 		ddt_t *ddt = spa->spa_ddt[c];
+		if (ddt == NULL)
+			continue;
 		for (enum ddt_type type = 0; type < DDT_TYPES; type++) {
 			for (enum ddt_class class = 0; class < DDT_CLASSES;
 			    class++) {
+				if (spa->spa_import_flags & ZFS_IMPORT_DEDUP_PRUNE_UNIQUE) {
+					if (type == DDT_TYPE_ZAP &&
+					    (class == DDT_CLASS_UNIQUE))
+					    continue;
+				}
+
 				error = ddt_object_load(ddt, type, class);
 				if (error != 0 && error != ENOENT)
 					return (error);
@@ -1298,6 +1307,25 @@ ddt_sync(spa_t *spa, uint64_t txg)
 
 	rio = zio_root(spa, NULL, NULL,
 	    ZIO_FLAG_CANFAIL | ZIO_FLAG_SPECULATIVE | ZIO_FLAG_SELF_HEAL);
+
+	if (spa->spa_import_flags & ZFS_IMPORT_DEDUP_PRUNE_UNIQUE) {
+		for (enum zio_checksum c = 0; c < ZIO_CHECKSUM_FUNCTIONS;
+		    c++) {
+			ddt_t *ddt = spa->spa_ddt[c];
+			char name[DDT_NAMELEN];
+
+			if (ddt == NULL)
+				continue;
+
+			ddt_object_name(ddt, DDT_TYPE_ZAP,
+			    DDT_CLASS_UNIQUE, name);
+			(void)zap_remove(ddt->ddt_os, DMU_POOL_DIRECTORY_OBJECT,
+			    name, tx);
+			(void)zap_remove(ddt->ddt_os, spa->spa_ddt_stat_object,
+			    name, tx);
+		}
+		spa->spa_import_flags &= ~ZFS_IMPORT_DEDUP_PRUNE_UNIQUE;
+	}
 
 	/*
 	 * This function may cause an immediate scan of ddt blocks (see

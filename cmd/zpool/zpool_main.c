@@ -3443,7 +3443,8 @@ zpool_do_checkpoint(int argc, char **argv)
 	return (err);
 }
 
-#define	CHECKPOINT_OPT	1024
+#define	CHECKPOINT_OPT		1024
+#define	DDTDROPUNIQUE_OPT	1025
 
 enum zpool_load_type {
 	ZPOOL_LOAD_TYPE_DDT,
@@ -3603,6 +3604,7 @@ zpool_do_import(int argc, char **argv)
 
 	struct option long_options[] = {
 		{"rewind-to-checkpoint", no_argument, NULL, CHECKPOINT_OPT},
+		{"ddt-drop-unique", no_argument, NULL, DDTDROPUNIQUE_OPT},
 		{0, 0, 0, 0}
 	};
 
@@ -3697,6 +3699,9 @@ zpool_do_import(int argc, char **argv)
 			break;
 		case CHECKPOINT_OPT:
 			flags |= ZFS_IMPORT_CHECKPOINT;
+			break;
+		case DDTDROPUNIQUE_OPT:
+			flags |= ZFS_IMPORT_DEDUP_PRUNE_UNIQUE;
 			break;
 		case ':':
 			(void) fprintf(stderr, gettext("missing argument for "
