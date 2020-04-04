@@ -506,6 +506,13 @@ usage(boolean_t requested)
 	boolean_t show_properties = B_FALSE;
 	FILE *fp = requested ? stdout : stderr;
 
+	/*
+	 * Don't show usage if run via wrapper command
+	 */
+	if (getenv("VSCMD_WRAPPER") != NULL) {
+		exit(requested ? 0 : 2);
+	}
+
 	if (current_command == NULL) {
 
 		(void) fprintf(fp, gettext("usage: zfs command args ...\n"));

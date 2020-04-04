@@ -501,6 +501,13 @@ usage(boolean_t requested)
 {
 	FILE *fp = requested ? stdout : stderr;
 
+	/*
+	 * Don't show usage if run via wrapper command
+	 */
+	if (getenv("VSCMD_WRAPPER") != NULL) {
+		exit(requested ? 0 : 2);
+	}
+
 	if (current_command == NULL) {
 		int i;
 
