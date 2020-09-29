@@ -1289,7 +1289,7 @@ ddt_sync_table(ddt_t *ddt, dmu_tx_t *tx, uint64_t txg)
 						ASSERT0(rmdde.dde_phys[u].ddp_refcnt);
 					}
 				}
-				ddt_stat_update(ddt, &rmdde, -1);
+				ddt_stat_update(ddt, &rmdde, -1ULL);
 				VERIFY0(ddt_object_remove(ddt,
 				    DDT_TYPE_CURRENT, DDT_CLASS_UNIQUE,
 				    &rmdde, tx));
