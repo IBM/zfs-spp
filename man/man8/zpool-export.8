@@ -66,6 +66,15 @@ Forcefully unmount all datasets, and allow export of pools with active shared sp
 This command will forcefully export the pool even if it has a shared spare that
 is currently being used.
 This may lead to potential data corruption.
+.It Fl F
+Forcibly export the pool.
+.Pp
+This option allows a pool to be exported even when the underlying disks are
+offline and the pool is unavailable.
+When force exporting a pool, any outstanding dirty data will be discarded.
+This option implies the
+.It Fl f
+option.
 .El
 .
 .Sh SEE ALSO

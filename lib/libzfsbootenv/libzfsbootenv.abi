@@ -3,17 +3,20 @@
     <dependency name='libzfs.so.4'/>
     <dependency name='libzfs_core.so.3'/>
     <dependency name='libuuid.so.1'/>
+    <dependency name='librt.so.1'/>
     <dependency name='libblkid.so.1'/>
     <dependency name='libudev.so.1'/>
     <dependency name='libuutil.so.3'/>
     <dependency name='libm.so.6'/>
-    <dependency name='libcrypto.so.1.1'/>
+    <dependency name='libcrypto.so.10'/>
     <dependency name='libz.so.1'/>
     <dependency name='libnvpair.so.3'/>
     <dependency name='libtirpc.so.3'/>
     <dependency name='libc.so.6'/>
   </elf-needed>
   <elf-function-symbols>
+    <elf-symbol name='_fini' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='_init' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='lzbe_add_pair' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='lzbe_bootenv_print' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='lzbe_get_boot_device' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>

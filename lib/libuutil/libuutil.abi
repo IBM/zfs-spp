@@ -4,6 +4,8 @@
     <dependency name='ld-linux-x86-64.so.2'/>
   </elf-needed>
   <elf-function-symbols>
+    <elf-symbol name='_fini' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='_init' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='_sol_getmntent' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_add_16' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_add_16_nv' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
@@ -24,7 +26,7 @@
     <elf-symbol name='atomic_add_short' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_add_short_nv' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_and_16' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
-    <elf-symbol name='atomic_and_16_nv' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='atomic_and_16_nv' type='func-type' binding='global-binding' visibility='default-visibility' alias='atomic_and_ushort_nv' is-defined='yes'/>
     <elf-symbol name='atomic_and_32' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_and_32_nv' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_and_64' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
@@ -87,7 +89,7 @@
     <elf-symbol name='atomic_or_32_nv' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_or_64' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_or_64_nv' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
-    <elf-symbol name='atomic_or_8' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='atomic_or_8' type='func-type' binding='global-binding' visibility='default-visibility' alias='atomic_or_uchar' is-defined='yes'/>
     <elf-symbol name='atomic_or_8_nv' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_or_uchar' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_or_uchar_nv' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
@@ -110,8 +112,8 @@
     <elf-symbol name='atomic_sub_char_nv' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_sub_int' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_sub_int_nv' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
-    <elf-symbol name='atomic_sub_long' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
-    <elf-symbol name='atomic_sub_long_nv' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='atomic_sub_long' type='func-type' binding='global-binding' visibility='default-visibility' alias='atomic_sub_64,atomic_sub_ptr' is-defined='yes'/>
+    <elf-symbol name='atomic_sub_long_nv' type='func-type' binding='global-binding' visibility='default-visibility' alias='atomic_sub_64_nv,atomic_sub_ptr_nv' is-defined='yes'/>
     <elf-symbol name='atomic_sub_ptr' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_sub_ptr_nv' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_sub_short' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
@@ -122,8 +124,8 @@
     <elf-symbol name='atomic_swap_8' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_swap_ptr' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='atomic_swap_uchar' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
-    <elf-symbol name='atomic_swap_uint' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
-    <elf-symbol name='atomic_swap_ulong' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='atomic_swap_uint' type='func-type' binding='global-binding' visibility='default-visibility' alias='atomic_swap_32' is-defined='yes'/>
+    <elf-symbol name='atomic_swap_ulong' type='func-type' binding='global-binding' visibility='default-visibility' alias='atomic_swap_64,atomic_swap_ptr' is-defined='yes'/>
     <elf-symbol name='atomic_swap_ushort' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='avl_add' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='avl_create' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>

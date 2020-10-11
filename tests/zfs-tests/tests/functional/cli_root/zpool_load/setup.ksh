@@ -30,3 +30,15 @@
 DISK=${DISKS%% *}
 
 default_setup $DISK
+
+function create_fifo
+{
+	log_must rm -f $1
+	log_must mkfifo $1
+}
+
+function zpool_export_cleanup
+{
+	[[ -d $TESTDIR0 ]] && log_must rm -rf $TESTDIR0
+	default_cleanup
+}
