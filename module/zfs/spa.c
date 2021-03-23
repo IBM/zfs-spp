@@ -1465,6 +1465,8 @@ spa_deactivate(spa_t *spa)
 	if (spa_exiting_any(spa)) {
 		metaslab_class_force_discard(spa->spa_normal_class);
 		metaslab_class_force_discard(spa->spa_log_class);
+		metaslab_class_force_discard(spa->spa_special_class);
+		metaslab_class_force_discard(spa->spa_dedup_class);
 	}
 
 	metaslab_class_destroy(spa->spa_normal_class);
