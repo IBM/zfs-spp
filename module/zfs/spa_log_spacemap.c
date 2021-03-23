@@ -952,6 +952,9 @@ spa_generate_syncing_log_sm(spa_t *spa, dmu_tx_t *tx)
 	uint64_t txg = dmu_tx_get_txg(tx);
 	objset_t *mos = spa_meta_objset(spa);
 
+	if (spa_exiting_any(spa))
+		return;
+
 	if (spa_syncing_log_sm(spa) != NULL)
 		return;
 
@@ -972,6 +975,8 @@ spa_generate_syncing_log_sm(spa_t *spa, dmu_tx_t *tx)
 		    &spacemap_zap, tx));
 		spa_feature_incr(spa, SPA_FEATURE_LOG_SPACEMAP, tx);
 	}
+	if (error && spa_exiting_any(spa))
+		return;
 	VERIFY0(error);
 
 	uint64_t sm_obj;
