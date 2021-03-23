@@ -1352,6 +1352,9 @@ put_nvlist(zfs_cmd_t *zc, nvlist_t *nvl)
 	int error = 0;
 	size_t size;
 
+	if (nvl == NULL)
+		return (SET_ERROR(EINVAL));
+
 	size = fnvlist_size(nvl);
 
 	if (size > zc->zc_nvlist_dst_size) {
