@@ -1355,12 +1355,15 @@ put_nvlist(zfs_cmd_t *zc, nvlist_t *nvl)
 	if (nvl == NULL)
 		return (SET_ERROR(EINVAL));
 
-	size = fnvlist_size(nvl);
+	if (nvlist_size(nvl, &size, NV_ENCODE_NATIVE))
+		return (SET_ERROR(EINVAL));
 
 	if (size > zc->zc_nvlist_dst_size) {
 		error = SET_ERROR(ENOMEM);
 	} else {
-		packed = fnvlist_pack(nvl, &size);
+		if (nvlist_pack(nvl, &packed, &size, NV_ENCODE_NATIVE,
+		    KM_SLEEP))
+			return (SET_ERROR(EINVAL));
 		if (ddi_copyout(packed, (void *)(uintptr_t)zc->zc_nvlist_dst,
 		    size, zc->zc_iflags) != 0)
 			error = SET_ERROR(EFAULT);
