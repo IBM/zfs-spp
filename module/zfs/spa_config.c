@@ -365,8 +365,9 @@ spa_all_configs(uint64_t *generation)
 
 	mutex_enter(&spa_namespace_lock);
 	while ((spa = spa_next(spa)) != NULL) {
-		if (INGLOBALZONE(curproc) ||
-		    zone_dataset_visible(spa_name(spa), NULL)) {
+		if (!spa_exiting_any(spa) &&
+		    (INGLOBALZONE(curproc) ||
+		    zone_dataset_visible(spa_name(spa), NULL))) {
 			mutex_enter(&spa->spa_props_lock);
 			fnvlist_add_nvlist(pools, spa_name(spa),
 			    spa->spa_config);
@@ -404,6 +405,13 @@ spa_config_generate(spa_t *spa, vdev_t *vd, uint64_t txg, int getstats)
 	boolean_t locked = B_FALSE;
 	uint64_t split_guid;
 	char *pool_name;
+
+	if (spa_exiting_any(spa)) {
+		config = fnvlist_alloc();
+		fnvlist_add_string(config, ZPOOL_CONFIG_POOL_NAME, pool_name);
+		fnvlist_add_uint64(config, ZPOOL_CONFIG_POOL_STATE, POOL_STATE_UNINITIALIZED);
+		return (config);
+	}
 
 	if (vd == NULL) {
 		vd = rvd;
