@@ -6227,6 +6227,8 @@ metaslab_update_ondisk_flush_data(metaslab_t *ms, dmu_tx_t *tx)
 		VERIFY0(zap_add(mos, vd->vdev_top_zap,
 		    VDEV_TOP_ZAP_MS_UNFLUSHED_PHYS_TXGS, sizeof (uint64_t), 1,
 		    &object, tx));
+	} else if (spa_exiting_any(spa)) {
+		/* Do nothing */
 	} else {
 		VERIFY0(err);
 	}
