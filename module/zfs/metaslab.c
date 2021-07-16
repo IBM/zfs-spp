@@ -6179,6 +6179,10 @@ metaslab_enable(metaslab_t *msp, boolean_t sync, boolean_t unload)
 	metaslab_group_t *mg = msp->ms_group;
 	spa_t *spa = mg->mg_vd->vdev_spa;
 
+	if (spa_exiting_any(spa)) {
+		return;
+	}
+
 	/*
 	 * Wait for the outstanding IO to be synced to prevent newly
 	 * allocated blocks from being overwritten.  This used by
