@@ -3861,6 +3861,9 @@ metaslab_flush(metaslab_t *msp, dmu_tx_t *tx)
 	ASSERT(metaslab_unflushed_txg(msp) != 0);
 	ASSERT(avl_find(&spa->spa_metaslabs_by_flushed, msp, NULL) != NULL);
 
+	if (spa_exiting_any(spa)) {
+		return (B_FALSE);
+	}
 	/*
 	 * There is nothing wrong with flushing the same metaslab twice, as
 	 * this codepath should work on that case. However, the current
