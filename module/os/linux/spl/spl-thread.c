@@ -215,6 +215,7 @@ issig(int why)
 
 EXPORT_SYMBOL(issig);
 
+/*
  * spl_kthread_signal - Wrapper for sending signals to a thread.
  */
 int

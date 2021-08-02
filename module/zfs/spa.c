@@ -2723,7 +2723,6 @@ spa_livelist_delete_cb(void *arg, zthr_t *z)
 			    " livelist %llu, %lld remaining",
 			    (u_longlong_t)dle->dle_bpobj.bpo_object,
 			    (u_longlong_t)ll_obj, (longlong_t)count - 1);
-			VERIFY0(dsl_sync_task(spa_name(spa), NULL,
 			err = dsl_sync_task(spa_name(spa), NULL,
 			    sublist_delete_sync, &sync_arg, 0,
 			    ZFS_SPACE_CHECK_DESTROY);

@@ -173,7 +173,7 @@ struct objset {
 	/* Protected by os_lock */
 	kmutex_t os_lock;
 	kthread_t *os_shutdown_initiator;
-	multilist_t *os_dirty_dnodes[TXG_SIZE];
+	multilist_t os_dirty_dnodes[TXG_SIZE];
 	list_t os_dnodes;
 	list_t os_downgraded_dbufs;
 
