@@ -3843,7 +3843,6 @@ function set_tunable_impl
 	typeset name="$1"
 	typeset value="$2"
 	typeset mdb_cmd="$3"
-	typeset module="${4:-zfs}"
 
 	eval "typeset tunable=\$$name"
 	case "$tunable" in
@@ -3862,7 +3861,7 @@ function set_tunable_impl
 
 	case "$(uname)" in
 	Linux)
-		typeset zfs_tunables="/sys/module/$module/parameters"
+		typeset zfs_tunables="/sys/module/zfs/parameters"
 		[[ -w "$zfs_tunables/$tunable" ]] || return 1
 		cat >"$zfs_tunables/$tunable" <<<"$value"
 		return $?
@@ -3872,7 +3871,6 @@ function set_tunable_impl
 		return "$?"
 		;;
 	SunOS)
-		[[ "$module" -eq "zfs" ]] || return 1
 		echo "${tunable}/${mdb_cmd}0t${value}" | mdb -kw
 		return $?
 		;;
