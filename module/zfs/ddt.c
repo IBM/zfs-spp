@@ -1258,7 +1258,8 @@ ddt_sync_table(ddt_t *ddt, dmu_tx_t *tx, uint64_t txg)
 		for (int64_t i = 0; i < (int64_t)(count - ddt_unique_max); i++) {
 			ddt_entry_t rmdde;
 			bzero(&rmdde, sizeof (ddt_entry_t));
-			uint64_t walk = spa_get_random(UINT64_MAX);
+			uint64_t walk;
+			(void) random_get_pseudo_bytes((void *)&walk, sizeof (walk));
 			if (ddt_object_walk(ddt,
 			    DDT_TYPE_CURRENT, DDT_CLASS_UNIQUE,
 			    &walk, &rmdde) == 0) {
