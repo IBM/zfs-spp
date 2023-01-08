@@ -151,13 +151,9 @@ cppcheck-FreeBSD:
 cppcheck: cppcheck-@ac_system@
 
 distdir:
-<<<<<<< HEAD
 	(cd @srcdir@ && find $(ZFS_MODULES) os -name '*.[chS]') | \
 	while read path; do \
 		mkdir -p $$distdir/$${path%/*}; \
 		cp @srcdir@/$$path $$distdir/$$path; \
 	done; \
-=======
-	cd @srcdir@ && find . -name '*.[chxS]' -exec sh -c 'for f; do mkdir -p $$distdir/$${f%/*}; cp @srcdir@/$$f $$distdir/$$f; done' _ {} +
->>>>>>> 2794c465d (Implement NFSv41 ACLs through xattr)
 	cp @srcdir@/Makefile.bsd $$distdir/Makefile.bsd
