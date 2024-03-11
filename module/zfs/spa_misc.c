@@ -247,7 +247,7 @@ typedef struct {
 /*
  * The spa namespace lock is consider stuck if held for over 90 seconds
  */
-#define	STUCK_NAMESPACE_LOCK_LIMIT	90
+unsigned long zfs_spa_namespace_duration_limit = 90;
 
 static avl_tree_t spa_namespace_avl;
 static spa_namespace_lock_t spa_namespace_lock;
@@ -646,10 +646,11 @@ spa_namespace_enter(const char *tag)
 #if defined(_KERNEL) && defined(__linux__)
 	hrtime_t now = gethrtime();
 
-	if (spa_namespace_lock.snl_mutex.m_owner != NULL &&
+	if (zfs_spa_namespace_duration_limit > 0 &&
+	    spa_namespace_lock.snl_mutex.m_owner != NULL &&
 	    spa_namespace_lock.snl_start_time > 0 &&
 	    (now - spa_namespace_lock.snl_start_time) >
-	    SEC2NSEC(STUCK_NAMESPACE_LOCK_LIMIT)) {
+	    SEC2NSEC(zfs_spa_namespace_duration_limit)) {
 		cmn_err(CE_WARN, "spa_namespace_enter(%s): lock held for "
 		    "%llu secs", tag, (u_longlong_t)NSEC2SEC(now -
 		    spa_namespace_lock.snl_start_time));
@@ -663,7 +664,7 @@ spa_namespace_enter(const char *tag)
 		now = gethrtime();
 		if (spa_namespace_lock.snl_start_time > 0 &&
 		    (now - spa_namespace_lock.snl_start_time) >
-		    SEC2NSEC(STUCK_NAMESPACE_LOCK_LIMIT)) {
+		    SEC2NSEC(zfs_spa_namespace_duration_limit)) {
 			cmn_err(CE_WARN, "spa_namespace_enter(%s): stealing "
 			    "lock in process %s", tag, getcomm());
 
@@ -3200,3 +3201,6 @@ ZFS_MODULE_PARAM(zfs, zfs_, special_class_metadata_reserve_pct, INT, ZMOD_RW,
 
 ZFS_MODULE_PARAM_CALL(zfs_spa, spa_, slop_shift, param_set_slop_shift,
 	param_get_int, ZMOD_RW, "Reserved free space in pool");
+
+ZFS_MODULE_PARAM(zfs_spa, zfs_spa_, namespace_duration_limit, ULONG, ZMOD_RW,
+	"The spa namespace lock is considered stuck after this many seconds");
