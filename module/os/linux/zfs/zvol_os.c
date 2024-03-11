@@ -570,8 +570,8 @@ retry:
 		 * the kernel so the only option is to return the error for
 		 * the caller to handle it.
 		 */
-		if (!mutex_owned(&spa_namespace_lock)) {
-			if (!mutex_tryenter(&spa_namespace_lock)) {
+		if (!spa_namespace_held(FTAG)) {
+			if (!spa_namespace_tryenter(FTAG)) {
 				mutex_exit(&zv->zv_state_lock);
 				rw_exit(&zv->zv_suspend_lock);
 
@@ -593,7 +593,7 @@ retry:
 		error = -zvol_first_open(zv, !(flag & FMODE_WRITE));
 
 		if (drop_namespace)
-			mutex_exit(&spa_namespace_lock);
+			spa_namespace_exit(FTAG);
 	}
 
 	if (error == 0) {

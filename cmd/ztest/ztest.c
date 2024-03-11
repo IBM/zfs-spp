@@ -1183,9 +1183,9 @@ ztest_kill(ztest_shared_t *zs)
 	 * Before we kill off ztest, make sure that the config is updated.
 	 * See comment above spa_write_cachefile().
 	 */
-	mutex_enter(&spa_namespace_lock);
+	spa_namespace_enter(FTAG);
 	spa_write_cachefile(ztest_spa, B_FALSE, B_FALSE, B_FALSE);
-	mutex_exit(&spa_namespace_lock);
+	spa_namespace_exit(FTAG);
 
 	(void) kill(getpid(), SIGKILL);
 }
@@ -3571,10 +3571,10 @@ ztest_split_pool(ztest_ds_t *zd, uint64_t id)
 
 	if (error == 0) {
 		(void) printf("successful split - results:\n");
-		mutex_enter(&spa_namespace_lock);
+		spa_namespace_enter(FTAG);
 		show_pool_stats(spa);
 		show_pool_stats(spa_lookup("splitp"));
-		mutex_exit(&spa_namespace_lock);
+		spa_namespace_exit(FTAG);
 		++zs->zs_splits;
 		--zs->zs_mirrors;
 	}
@@ -6858,11 +6858,11 @@ ztest_walk_pool_directory(char *header)
 	if (ztest_opts.zo_verbose >= 6)
 		(void) printf("%s\n", header);
 
-	mutex_enter(&spa_namespace_lock);
+	spa_namespace_enter(FTAG);
 	while ((spa = spa_next(spa)) != NULL)
 		if (ztest_opts.zo_verbose >= 6)
 			(void) printf("\t%s\n", spa_name(spa));
-	mutex_exit(&spa_namespace_lock);
+	spa_namespace_exit(FTAG);
 }
 
 static void
@@ -7604,11 +7604,11 @@ ztest_run(ztest_shared_t *zs)
 	/*
 	 * Verify that we can loop over all pools.
 	 */
-	mutex_enter(&spa_namespace_lock);
+	spa_namespace_enter(FTAG);
 	for (spa = spa_next(NULL); spa != NULL; spa = spa_next(spa))
 		if (ztest_opts.zo_verbose > 3)
 			(void) printf("spa_next: found %s\n", spa_name(spa));
-	mutex_exit(&spa_namespace_lock);
+	spa_namespace_exit(FTAG);
 
 	/*
 	 * Verify that we can export the pool and reimport it under a

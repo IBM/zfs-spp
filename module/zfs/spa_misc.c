@@ -232,8 +232,25 @@
  * locking is, always, based on spa_namespace_lock and spa_config_lock[].
  */
 
+/*
+ * Global namespace lock that can be stolen from a hung task
+ */
+typedef struct {
+	kmutex_t	snl_mutex;
+#if defined(_KERNEL) && defined(__linux__)
+	spinlock_t	snl_lock;	/* used for serializing steal path */
+	uint64_t	snl_start_time;		/* to calculate age of writer */
+	int		snl_orphaned_holders;	/* how many have been stolen */
+#endif
+} spa_namespace_lock_t;
+
+/*
+ * The spa namespace lock is consider stuck if held for over 90 seconds
+ */
+unsigned long zfs_spa_namespace_duration_limit = 90;
+
 static avl_tree_t spa_namespace_avl;
-kmutex_t spa_namespace_lock;
+static spa_namespace_lock_t spa_namespace_lock;
 static kcondvar_t spa_namespace_cv;
 int spa_max_replication_override = SPA_DVAS_PER_BP;
 
@@ -598,6 +615,127 @@ spa_config_held(spa_t *spa, int locks, krw_t rw)
 	return (locks_held);
 }
 
+static void
+spa_namespace_init(void)
+{
+	mutex_init(&spa_namespace_lock.snl_mutex, NULL, MUTEX_DEFAULT, NULL);
+#if defined(_KERNEL) && defined(__linux__)
+	spin_lock_init(&spa_namespace_lock.snl_lock);
+#endif
+}
+
+static void
+spa_namespace_destroy(void)
+{
+	mutex_destroy(&spa_namespace_lock.snl_mutex);
+#if defined(_KERNEL) && defined(__linux__)
+	VERIFY0(spin_is_locked(&spa_namespace_lock.snl_lock));
+#endif
+}
+
+/*
+ * Acquire the spa namespace lock.
+ *
+ * When the lock has been held for an extended period, it can be stolen
+ * from the original owner and the caller takes over ownership. When the
+ * stolen lock is dropped, then the backlog of waiters can drain.
+ */
+void
+spa_namespace_enter(const char *tag)
+{
+#if defined(_KERNEL) && defined(__linux__)
+	hrtime_t now = gethrtime();
+
+	if (zfs_spa_namespace_duration_limit > 0 &&
+	    spa_namespace_lock.snl_mutex.m_owner != NULL &&
+	    spa_namespace_lock.snl_start_time > 0 &&
+	    (now - spa_namespace_lock.snl_start_time) >
+	    SEC2NSEC(zfs_spa_namespace_duration_limit)) {
+		cmn_err(CE_WARN, "spa_namespace_enter(%s): lock held for "
+		    "%llu secs", tag, (u_longlong_t)NSEC2SEC(now -
+		    spa_namespace_lock.snl_start_time));
+
+		/*
+		 * Serialize access to stealing the lock
+		 * - winner will steal the lock, resetting the start time
+		 * - losers will fall into the normal lock acquisition path
+		 */
+		spin_lock(&spa_namespace_lock.snl_lock);
+		now = gethrtime();
+		if (spa_namespace_lock.snl_start_time > 0 &&
+		    (now - spa_namespace_lock.snl_start_time) >
+		    SEC2NSEC(zfs_spa_namespace_duration_limit)) {
+			cmn_err(CE_WARN, "spa_namespace_enter(%s): stealing "
+			    "lock in process %s", tag, getcomm());
+
+			spa_namespace_lock.snl_orphaned_holders++;
+			spa_namespace_lock.snl_mutex.m_owner = curthread;
+			spa_namespace_lock.snl_start_time = now;
+			spin_unlock(&spa_namespace_lock.snl_lock);
+			return;
+		} else {
+			spin_unlock(&spa_namespace_lock.snl_lock);
+		}
+	}
+
+	mutex_enter(&spa_namespace_lock.snl_mutex);
+	spa_namespace_lock.snl_start_time = gethrtime();
+#else
+	(void) tag;
+
+	mutex_enter(&spa_namespace_lock.snl_mutex);
+#endif
+}
+
+void
+spa_namespace_exit(const char *tag)
+{
+	(void) tag;
+
+#if defined(_KERNEL) && defined(__linux__)
+	/*
+	 * If an orphaned lock is eventually dropped (hang was resolved),
+	 * then treat this spa_namespace_exit as a no-op since the process
+	 * that stole the lock dropped it.
+	 */
+	spin_lock(&spa_namespace_lock.snl_lock);
+	if (spa_namespace_lock.snl_orphaned_holders > 0 &&
+	    spa_namespace_lock.snl_mutex.m_owner != curthread) {
+		cmn_err(CE_WARN, "spa_namespace_exit(%s) encountered orphaned "
+		    "owner (%d orphans remaining) in process %s", tag,
+		    spa_namespace_lock.snl_orphaned_holders - 1, getcomm());
+		spa_namespace_lock.snl_orphaned_holders--;
+		spin_unlock(&spa_namespace_lock.snl_lock);
+		return;
+	}
+	spa_namespace_lock.snl_start_time = 0;
+	spin_unlock(&spa_namespace_lock.snl_lock);
+#endif
+	mutex_exit(&spa_namespace_lock.snl_mutex);
+}
+
+boolean_t
+spa_namespace_held(const char *tag)
+{
+#if defined(_KERNEL) && defined(__linux__)
+	return (MUTEX_HELD(&spa_namespace_lock.snl_mutex) ||
+	    spa_namespace_lock.snl_orphaned_holders);
+#else
+	return (MUTEX_HELD(&spa_namespace_lock.snl_mutex));
+#endif
+}
+
+boolean_t
+spa_namespace_tryenter(const char *tag)
+{
+	boolean_t locked = mutex_tryenter(&spa_namespace_lock.snl_mutex);
+#if defined(_KERNEL) && defined(__linux__)
+	if (locked)
+		spa_namespace_lock.snl_start_time = gethrtime();
+#endif
+	return (locked);
+}
+
 /*
  * ==========================================================================
  * SPA namespace functions
@@ -616,7 +754,7 @@ spa_lookup(const char *name)
 	avl_index_t where;
 	char *cp;
 
-	ASSERT(MUTEX_HELD(&spa_namespace_lock));
+	ASSERT(spa_namespace_held(FTAG));
 
 	(void) strlcpy(search.spa_name, name, sizeof (search.spa_name));
 
@@ -678,7 +816,7 @@ spa_add(const char *name, nvlist_t *config, const char *altroot)
 	spa_t *spa;
 	spa_config_dirent_t *dp;
 
-	ASSERT(MUTEX_HELD(&spa_namespace_lock));
+	ASSERT(spa_namespace_held(FTAG));
 
 	spa = kmem_zalloc(sizeof (spa_t), KM_SLEEP);
 
@@ -812,7 +950,7 @@ spa_remove(spa_t *spa)
 {
 	spa_config_dirent_t *dp;
 
-	ASSERT(MUTEX_HELD(&spa_namespace_lock));
+	ASSERT(spa_namespace_held(FTAG));
 	ASSERT(spa_state(spa) == POOL_STATE_UNINITIALIZED);
 	ASSERT3U(zfs_refcount_count(&spa->spa_refcount), ==, 0);
 	ASSERT0(spa->spa_waiters);
@@ -893,7 +1031,7 @@ spa_remove(spa_t *spa)
 spa_t *
 spa_next(spa_t *prev)
 {
-	ASSERT(MUTEX_HELD(&spa_namespace_lock));
+	ASSERT(spa_namespace_held(FTAG));
 
 	if (prev)
 		return (AVL_NEXT(&spa_namespace_avl, prev));
@@ -915,7 +1053,7 @@ void
 spa_open_ref(spa_t *spa, void *tag)
 {
 	ASSERT(zfs_refcount_count(&spa->spa_refcount) >= spa->spa_minref ||
-	    MUTEX_HELD(&spa_namespace_lock));
+	    spa_namespace_held(FTAG));
 	(void) zfs_refcount_add(&spa->spa_refcount, tag);
 }
 
@@ -941,7 +1079,7 @@ void
 spa_close(spa_t *spa, void *tag)
 {
 	ASSERT(zfs_refcount_count(&spa->spa_refcount) > spa->spa_minref ||
-	    MUTEX_HELD(&spa_namespace_lock));
+	    spa_namespace_held(FTAG));
 	spa_close_common(spa, tag);
 }
 
@@ -967,7 +1105,7 @@ spa_async_close(spa_t *spa, void *tag)
 boolean_t
 spa_refcount_zero(spa_t *spa)
 {
-	ASSERT(MUTEX_HELD(&spa_namespace_lock));
+	ASSERT(spa_namespace_held(FTAG));
 
 	return (zfs_refcount_count(&spa->spa_refcount) == spa->spa_minref);
 }
@@ -1213,7 +1351,7 @@ uint64_t
 spa_vdev_enter(spa_t *spa)
 {
 	mutex_enter(&spa->spa_vdev_top_lock);
-	mutex_enter(&spa_namespace_lock);
+	spa_namespace_enter(FTAG);
 
 	vdev_autotrim_stop_all(spa);
 
@@ -1230,7 +1368,7 @@ uint64_t
 spa_vdev_detach_enter(spa_t *spa, uint64_t guid)
 {
 	mutex_enter(&spa->spa_vdev_top_lock);
-	mutex_enter(&spa_namespace_lock);
+	spa_namespace_enter(FTAG);
 
 	vdev_autotrim_stop_all(spa);
 
@@ -1252,7 +1390,7 @@ spa_vdev_detach_enter(spa_t *spa, uint64_t guid)
 uint64_t
 spa_vdev_config_enter(spa_t *spa)
 {
-	ASSERT(MUTEX_HELD(&spa_namespace_lock));
+	ASSERT(spa_namespace_held(FTAG));
 
 	spa_config_enter(spa, SCL_ALL, spa, RW_WRITER);
 
@@ -1266,7 +1404,7 @@ spa_vdev_config_enter(spa_t *spa)
 void
 spa_vdev_config_exit(spa_t *spa, vdev_t *vd, uint64_t txg, int error, char *tag)
 {
-	ASSERT(MUTEX_HELD(&spa_namespace_lock));
+	ASSERT(spa_namespace_held(FTAG));
 
 	int config_changed = B_FALSE;
 
@@ -1354,7 +1492,7 @@ spa_vdev_exit(spa_t *spa, vdev_t *vd, uint64_t txg, int error)
 	vdev_rebuild_restart(spa);
 
 	spa_vdev_config_exit(spa, vd, txg, error, FTAG);
-	mutex_exit(&spa_namespace_lock);
+	spa_namespace_exit(FTAG);
 	mutex_exit(&spa->spa_vdev_top_lock);
 
 	return (error);
@@ -1432,9 +1570,9 @@ spa_vdev_state_exit(spa_t *spa, vdev_t *vd, int error)
 	 * If the config changed, update the config cache.
 	 */
 	if (config_changed) {
-		mutex_enter(&spa_namespace_lock);
+		spa_namespace_enter(FTAG);
 		spa_write_cachefile(spa, B_FALSE, B_TRUE, B_FALSE);
-		mutex_exit(&spa_namespace_lock);
+		spa_namespace_exit(FTAG);
 	}
 
 	return (error);
@@ -1481,7 +1619,7 @@ spa_by_guid(uint64_t pool_guid, uint64_t device_guid)
 	spa_t *spa;
 	avl_tree_t *t = &spa_namespace_avl;
 
-	ASSERT(MUTEX_HELD(&spa_namespace_lock));
+	ASSERT(spa_namespace_held(FTAG));
 
 	for (spa = avl_first(t); spa != NULL; spa = AVL_NEXT(t, spa)) {
 		if (spa->spa_state == POOL_STATE_UNINITIALIZED)
@@ -2149,10 +2287,10 @@ spa_set_deadman_ziotime(hrtime_t ns)
 	spa_t *spa = NULL;
 
 	if (spa_mode_global != SPA_MODE_UNINIT) {
-		mutex_enter(&spa_namespace_lock);
+		spa_namespace_enter(FTAG);
 		while ((spa = spa_next(spa)) != NULL)
 			spa->spa_deadman_ziotime = ns;
-		mutex_exit(&spa_namespace_lock);
+		spa_namespace_exit(FTAG);
 	}
 }
 
@@ -2162,10 +2300,10 @@ spa_set_deadman_synctime(hrtime_t ns)
 	spa_t *spa = NULL;
 
 	if (spa_mode_global != SPA_MODE_UNINIT) {
-		mutex_enter(&spa_namespace_lock);
+		spa_namespace_enter(FTAG);
 		while ((spa = spa_next(spa)) != NULL)
 			spa->spa_deadman_synctime = ns;
-		mutex_exit(&spa_namespace_lock);
+		spa_namespace_exit(FTAG);
 	}
 }
 
@@ -2455,7 +2593,7 @@ spa_boot_init(void)
 void
 spa_init(spa_mode_t mode)
 {
-	mutex_init(&spa_namespace_lock, NULL, MUTEX_DEFAULT, NULL);
+	spa_namespace_init();
 	mutex_init(&spa_spare_lock, NULL, MUTEX_DEFAULT, NULL);
 	mutex_init(&spa_l2cache_lock, NULL, MUTEX_DEFAULT, NULL);
 	cv_init(&spa_namespace_cv, NULL, CV_DEFAULT, NULL);
@@ -2540,7 +2678,7 @@ spa_fini(void)
 	avl_destroy(&spa_l2cache_avl);
 
 	cv_destroy(&spa_namespace_cv);
-	mutex_destroy(&spa_namespace_lock);
+	spa_namespace_destroy();
 	mutex_destroy(&spa_spare_lock);
 	mutex_destroy(&spa_l2cache_lock);
 }
@@ -2921,10 +3059,10 @@ param_set_deadman_failmode_common(const char *val)
 		return (SET_ERROR(EINVAL));
 
 	if (spa_mode_global != SPA_MODE_UNINIT) {
-		mutex_enter(&spa_namespace_lock);
+		spa_namespace_enter(FTAG);
 		while ((spa = spa_next(spa)) != NULL)
 			spa_set_deadman_failmode(spa, val);
-		mutex_exit(&spa_namespace_lock);
+		spa_namespace_exit(FTAG);
 	}
 
 	return (0);
@@ -3009,7 +3147,6 @@ EXPORT_SYMBOL(spa_has_slogs);
 EXPORT_SYMBOL(spa_is_root);
 EXPORT_SYMBOL(spa_writeable);
 EXPORT_SYMBOL(spa_mode);
-EXPORT_SYMBOL(spa_namespace_lock);
 EXPORT_SYMBOL(spa_trust_config);
 EXPORT_SYMBOL(spa_missing_tvds_allowed);
 EXPORT_SYMBOL(spa_set_missing_tvds);
@@ -3064,3 +3201,6 @@ ZFS_MODULE_PARAM(zfs, zfs_, special_class_metadata_reserve_pct, INT, ZMOD_RW,
 
 ZFS_MODULE_PARAM_CALL(zfs_spa, spa_, slop_shift, param_set_slop_shift,
 	param_get_int, ZMOD_RW, "Reserved free space in pool");
+
+ZFS_MODULE_PARAM(zfs_spa, zfs_spa_, namespace_duration_limit, ULONG, ZMOD_RW,
+	"The spa namespace lock is considered stuck after this many seconds");

@@ -876,7 +876,7 @@ zio_inject_list_next(int *id, char *name, size_t buflen,
 	inject_handler_t *handler;
 	int ret;
 
-	mutex_enter(&spa_namespace_lock);
+	spa_namespace_enter(FTAG);
 	rw_enter(&inject_lock, RW_READER);
 
 	for (handler = list_head(&inject_handlers); handler != NULL;
@@ -894,7 +894,7 @@ zio_inject_list_next(int *id, char *name, size_t buflen,
 	}
 
 	rw_exit(&inject_lock);
-	mutex_exit(&spa_namespace_lock);
+	spa_namespace_exit(FTAG);
 
 	return (ret);
 }

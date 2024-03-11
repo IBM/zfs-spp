@@ -1079,7 +1079,7 @@ vdev_rebuild_restart_impl(vdev_t *vd)
 void
 vdev_rebuild_restart(spa_t *spa)
 {
-	ASSERT(MUTEX_HELD(&spa_namespace_lock));
+	ASSERT(spa_namespace_held(FTAG));
 
 	vdev_rebuild_restart_impl(spa->spa_root_vdev);
 }
@@ -1093,7 +1093,7 @@ vdev_rebuild_stop_wait(vdev_t *vd)
 {
 	spa_t *spa = vd->vdev_spa;
 
-	ASSERT(MUTEX_HELD(&spa_namespace_lock));
+	ASSERT(spa_namespace_held(FTAG));
 
 	if (vd == spa->spa_root_vdev) {
 		for (uint64_t i = 0; i < vd->vdev_children; i++)

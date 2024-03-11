@@ -828,9 +828,6 @@ extern void spa_sync_allpools(void);
 
 extern int zfs_sync_pass_deferred_free;
 
-/* spa namespace global mutex */
-extern kmutex_t spa_namespace_lock;
-
 /*
  * SPA configuration functions in spa_config.c
  */
@@ -983,6 +980,11 @@ extern int spa_config_enter_flags(spa_t *spa, int locks, const void *tag,
 extern void spa_config_enter(spa_t *spa, int locks, const void *tag, krw_t rw);
 extern void spa_config_exit(spa_t *spa, int locks, const void *tag);
 extern int spa_config_held(spa_t *spa, int locks, krw_t rw);
+
+extern void spa_namespace_enter(const char *tag);
+extern void spa_namespace_exit(const char *tag);
+extern boolean_t spa_namespace_held(const char *tag);
+extern boolean_t spa_namespace_tryenter(const char *tag);
 
 /* Pool vdev add/remove lock */
 extern uint64_t spa_vdev_enter(spa_t *spa);

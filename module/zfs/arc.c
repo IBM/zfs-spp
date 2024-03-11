@@ -8533,7 +8533,7 @@ l2arc_dev_get_next(void)
 	 * of cache devices (l2arc_dev_mtx).  Once a device has been selected,
 	 * both locks will be dropped and a spa config lock held instead.
 	 */
-	mutex_enter(&spa_namespace_lock);
+	spa_namespace_enter(FTAG);
 	mutex_enter(&l2arc_dev_mtx);
 
 	/* if there are no vdevs, there is nothing to do */
@@ -8577,7 +8577,7 @@ out:
 	 */
 	if (next != NULL)
 		spa_config_enter(next->l2ad_spa, SCL_L2ARC, next, RW_READER);
-	mutex_exit(&spa_namespace_lock);
+	spa_namespace_exit(FTAG);
 
 	return (next);
 }
@@ -10188,7 +10188,7 @@ l2arc_stop(void)
 void
 l2arc_spa_rebuild_start(spa_t *spa)
 {
-	ASSERT(MUTEX_HELD(&spa_namespace_lock));
+	ASSERT(spa_namespace_held(FTAG));
 
 	/*
 	 * Locate the spa's l2arc devices and kick off rebuild threads.
@@ -10213,7 +10213,7 @@ l2arc_spa_rebuild_start(spa_t *spa)
 void
 l2arc_spa_rebuild_stop(spa_t *spa)
 {
-	ASSERT(MUTEX_HELD(&spa_namespace_lock));
+	ASSERT(spa_namespace_held(FTAG));
 
 	/*
 	 * Locate the spa's l2arc devices and kick off rebuild threads.

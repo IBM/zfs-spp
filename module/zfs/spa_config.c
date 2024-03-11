@@ -132,7 +132,7 @@ spa_config_load(void)
 	 * Iterate over all elements in the nvlist, creating a new spa_t for
 	 * each one with the specified configuration.
 	 */
-	mutex_enter(&spa_namespace_lock);
+	spa_namespace_enter(FTAG);
 	nvpair = NULL;
 	while ((nvpair = nvlist_next_nvpair(nvlist, nvpair)) != NULL) {
 		if (nvpair_type(nvpair) != DATA_TYPE_NVLIST)
@@ -144,7 +144,7 @@ spa_config_load(void)
 			continue;
 		(void) spa_add(nvpair_name(nvpair), child, NULL);
 	}
-	mutex_exit(&spa_namespace_lock);
+	spa_namespace_exit(FTAG);
 
 	nvlist_free(nvlist);
 
@@ -247,7 +247,7 @@ spa_write_cachefile(spa_t *target, boolean_t removing, boolean_t postsysevent,
 	boolean_t ccw_failure;
 	int error = 0;
 
-	ASSERT(MUTEX_HELD(&spa_namespace_lock));
+	ASSERT(spa_namespace_held(FTAG));
 
 	if (!(spa_mode_global & SPA_MODE_WRITE))
 		return;
@@ -376,7 +376,7 @@ spa_all_configs(uint64_t *generation)
 
 	pools = fnvlist_alloc();
 
-	mutex_enter(&spa_namespace_lock);
+	spa_namespace_enter(FTAG);
 	while ((spa = spa_next(spa)) != NULL) {
 		if (!spa_exiting_any(spa) &&
 		    (INGLOBALZONE(curproc) ||
@@ -388,7 +388,7 @@ spa_all_configs(uint64_t *generation)
 		}
 	}
 	*generation = spa_config_generation;
-	mutex_exit(&spa_namespace_lock);
+	spa_namespace_exit(FTAG);
 
 	return (pools);
 }
@@ -589,9 +589,9 @@ spa_config_update_complete(spa_t *spa, uint64_t txg, boolean_t postsysevent,
 		 * This operation does not perform any pool I/O, so it is
 		 * safe even if one or more of them are suspended.
 		 */
-		mutex_enter(&spa_namespace_lock);
+		spa_namespace_enter(FTAG);
 		spa_write_cachefile(spa, B_FALSE, postsysevent, postsysevent);
-		mutex_exit(&spa_namespace_lock);
+		spa_namespace_exit(FTAG);
 	}
 
 	return (error);
